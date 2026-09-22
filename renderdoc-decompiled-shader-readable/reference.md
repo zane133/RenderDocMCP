@@ -124,18 +124,48 @@ Always comment the chosen identity next to `#define STEP…`.
 ```hlsl
 // 1. Resources + registers
 // 2. cmp / ubfe / math helpers
-// 3. Material struct + LoadMaterial() from cb arrays
+// 3. Named CB aliases at top of main (or LoadMaterial from cb arrays)
 // 4. Stage functions (Eval*) — fragile blocks = register body
 // 5. main: STEP switches → recipe → DEBUG_VIS output
+// 6. (Step 6 file) no rN; body only uses semantic names
 ```
+
+## Step 6 — human-readable naming
+
+After Step 4/5, optional compact file:
+
+1. Eliminate `r0`/`r1`… — `viewDir`, `N`, `ramp`, `litDirect`, `rimTerm`, …
+2. Alias every used `cbN[i].*` once at top of `main`; body never writes bare indices.
+3. Keep `float4 cbN[]` + `register(tN/sN/bN)`; do not reshape packing.
+4. Do **not** const-copy `v0..vN` interpolators for the whole shader (breaks rim).
+5. If user sets a line budget, drop only paths they named; document as recipe-faithful.
+6. Helpers take named parameters — no `cb0[…]` inside `Eval*` after aliasing.
+
+Example alias block:
+
+```hlsl
+float3 sunDir         = cb0[6].xyz;
+float3 cameraPos      = cb0[44].xyz;
+float  exposure       = cb0[109].x;
+float3 rimColor       = cb0[194].xyz;
+float  rimIntensity   = cb0[194].w;
+float  albedoLitScale = cb0[186].z;
+float  envIblScale    = cb0[186].w;
+float  normalStrength = cb5[0].w;
+float  brdfLutBlend   = cb5[1].x;
+```
+
+`DEBUG_VIS` for rim fresnel: save `1-|N·V|` at the rim site before fog/later passes
+reuse the same register.
 
 ## Session checklist
 
 - [ ] Worked from **this paste**, not an old readable file
 - [ ] Step 1 only: cmp / SV_* / asuint+ubfe / SampleGrad `.xy`
-- [ ] Stopped for user Apply + visual match before Step 4/5
+- [ ] Stopped for user Apply + visual match before Step 4/5/6
 - [ ] Compiles; X3206 gone or understood
 - [ ] Signature still matches VS (`float2`+`float` TEXCOORD split kept)
 - [ ] No path removal unless user asked
 - [ ] STEP off does not blow white; DEBUG_VIS is pre-combine
 - [ ] Dense VT/volume helpers still match Step 1 math
+- [ ] Step 6 (if any): no rN soup; CB aliases named; interpolators not const-copied

@@ -31,8 +31,9 @@ Goal: take a **3Dmigoto / RenderDoc decompiled** shader and produce HLSL that is
 | After… | Agent must… |
 |--------|-------------|
 | Step 1 written | **Stop.** Tell user to Apply Changes and compare. Wait for confirmation (`没问题` / `继续` / match OK). |
-| User confirms match | Only then Step 3 (if asked) → Step 4 → Step 5. |
-| User says “继续” | Advance **one** unfinished workflow step (usually 4, then 5). |
+| User confirms match | Only then Step 3 (if asked) → Step 4 → Step 5 → Step 6. |
+| User says “继续” | Advance **one** unfinished workflow step (4 → 5 → 6). |
+| User asks 人类可读 / 优化 rx / 翻译 cb | Run **Step 6** (after Step 5 or Step 4 OK). |
 | Visual mismatch | Revert toward register/`r0` form; fix; re-Apply. No further renaming. |
 
 ## Anti-patterns (this skill fails when…)
@@ -52,6 +53,7 @@ Progress:
 - [ ] 3. Optional: remove dead paths (user-requested only)
 - [ ] 4. Incremental readable rewrite
 - [ ] 5. Optional: STEP_*/DEBUG_VIS analysis harness
+- [ ] 6. Optional: human-readable semantic pass (no rN / named CBs)
 ```
 
 ### Step 1 — Minimal patch (must compile)
@@ -133,6 +135,70 @@ white). Document next to the switch.
 
 `DEBUG_VIS` = **pre-combine** intermediates (e.g. ramp before mask, color before volume).
 
+**DEBUG_VIS tip:** capture rim / fresnel values **at the rim site** — later fog/lights
+often clobber the same `rN` before return (e.g. `1-|N·V|` all-white bug).
+
+### Step 6 — Human-readable semantic pass (optional)
+
+When the user asks for **人类可读** / **优化 rx** / **翻译 cb** / a compact TA file
+(often after Step 5, or after Step 4 if no analysis harness):
+
+Deliverable: `*_readable.hlsl` (or similar) that a TA can read top-to-bottom.
+
+**Goals**
+
+1. **No `r0`/`r1`… soup** in the body — semantic locals only (`viewDir`, `N`,
+   `litDirect`, `rimTerm`, `gi`, …).
+2. **No bare `cb0[186].z` in the body** — alias once at top of `main` (or in a
+   small param block), then use names (`sunDir`, `albedoLitScale`, …).
+3. Keep `float4 cbN[]` packing + `register(tN/sN/bN)` — aliases only, no
+   `packoffset` reshape unless proven safe.
+4. **Do not const-copy interpolators** `v0..vN` into locals for the whole shader —
+   that previously dropped rim / facing. Comment them; use `v*` directly.
+5. Line budget: if user asks (e.g. ≤500), drop paths they named (probe / detail /
+   tiled lights / fog) with identity comments; keep the recipe they care about
+   (material → normal → F0 → sun/Ramp → rim → IBL → grade → exposure).
+
+**Alias block pattern (top of `main`)**
+
+```hlsl
+// Named CB aliases (inferred). Left = meaning; right = dump slot.
+float3 sunDir         = cb0[6].xyz;    // key / sun direction
+float3 cameraPos      = cb0[44].xyz;
+float  exposure       = cb0[109].x;
+float3 rimColor       = cb0[194].xyz;
+float  rimIntensity   = cb0[194].w;
+float  albedoLitScale = cb0[186].z;
+float  envIblScale    = cb0[186].w;
+// …material cb5 → normalStrength, brdfLutBlend, gradeSat, …
+```
+
+**Body uses only names** — helpers take named args (`EvalViewDir(worldPos,
+cameraPos, camForward, viewBend)`), not raw `cb0[…]` inside.
+
+**Naming heuristics (infer; comment uncertainty)**
+
+| Dump use | Prefer name |
+|----------|-------------|
+| Main/key light direction | `sunDir` / `mainLightDir` |
+| Camera world position | `cameraPos` |
+| Exposure / tonemap scale | `exposure` |
+| Rim colour / intensity / width | `rimColor`, `rimIntensity`, `rimWidth` |
+| Albedo / env / IBL scales | `albedoLitScale`, `envIblScale`, `skyLitScale` |
+| Screen AO blend | `screenAoBlend` |
+| Material normal strength | `normalStrength` |
+| Color-grade enable/sat/contrast | `gradeEnable`, `gradeSat`, `gradeContrast` |
+
+**Anti-patterns for Step 6**
+
+- Leaving half-finished `rN` + “wrong; correct is…” comments in the body.
+- Inventing `lerp`/`pow` while renaming.
+- Claiming binary-perfect match after heavy path removal — call it **recipe-faithful**,
+  keep Step 5 as the Apply-faithful reference.
+
+After Step 6: tell user to Apply the readable file and spot-check rim / Ramp /
+exposure; full lights/fog still live in `*_step5_analysis.hlsl`.
+
 ## Output expectations
 
 Each step deliver a `.hlsl` ready to paste into RenderDoc, plus a short note:
@@ -140,11 +206,12 @@ Each step deliver a `.hlsl` ready to paste into RenderDoc, plus a short note:
 - What was patched / rewritten this step
 - What was removed (if anything)
 - How to use STEP_*/DEBUG_VIS (if added)
+- For Step 6: alias table summary + which paths were dropped
 - What the user should do next (Apply / confirm / continue)
 - Risks (shared shader object affects all draws using it)
 
 ## Additional resources
 
-- Pitfalls, signatures, bit ops, STEP identities: [reference.md](reference.md)
+- Pitfalls, signatures, bit ops, STEP identities, Step 6 naming: [reference.md](reference.md)
 - Patch script: [scripts/patch_3dmigoto_for_renderdoc.py](scripts/patch_3dmigoto_for_renderdoc.py)
   (cmp + SV_* only; always hand-fix ubfe / SampleGrad / asuint)
