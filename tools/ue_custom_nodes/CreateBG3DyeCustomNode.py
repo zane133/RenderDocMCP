@@ -6,9 +6,9 @@ import unreal
 # 改成目标 Material 的 Content Browser 路径，不要带 .uasset 后缀。
 MATERIAL_PATH = "/Game/YourFolder/M_YourMaterial"
 
-# 脚本会读取同一仓库 shaders 目录下的 Custom Node HLSL。
-SCRIPT_DIR = Path(__file__).resolve().parent
-CUSTOM_CODE_PATH = SCRIPT_DIR / "shaders" / "ue_custom_bg3_dye_tint.hlsl"
+# 脚本会读取仓库 shaders/ 下的 Custom Node HLSL。
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CUSTOM_CODE_PATH = REPO_ROOT / "shaders" / "ue_custom_bg3_dye_tint.hlsl"
 
 # 可选：给 MSKcloth Texture Sample Parameter 预设一张纹理。
 # 示例：MASK_TEXTURE_PATH = "/Game/Characters/Textures/T_MSKcloth"

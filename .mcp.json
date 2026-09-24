@@ -1,7 +1,8 @@
 {
   "mcpServers": {
     "renderdoc": {
-      "command": "renderdoc-mcp"
+      "command": "C:\\Users\\Catfood\\AppData\\Local\\renderdoc-mcp\\v0.3.0\\renderdoc-mcp-windows-x64-v0.3.0\\bin\\renderdoc-mcp.exe",
+      "args": []
     }
   }
 }

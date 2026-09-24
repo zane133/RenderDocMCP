@@ -9,3 +9,5 @@ build/
 exports/
 *.egg-info/
 PROGRESS.md
+.claude/settings.local.json
+*.bak-*

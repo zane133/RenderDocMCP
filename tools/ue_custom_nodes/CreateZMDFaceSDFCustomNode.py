@@ -10,9 +10,9 @@ MATERIAL_PATH = "/Game/XW_Art/RES/TAExample/ToonRender/M_FBX_Face"
 FACE_SDF_TEXTURE_PATH = ""
 FACE_CONTROL_TEXTURE_PATH = ""
 
-SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 CUSTOM_CODE_PATH = (
-    SCRIPT_DIR / "shaders" / "ue_custom_zmd_face_sdf_masks.hlsl"
+    REPO_ROOT / "shaders" / "ue_custom_zmd_face_sdf_masks.hlsl"
 )
 
 CUSTOM_NODE_X = 650

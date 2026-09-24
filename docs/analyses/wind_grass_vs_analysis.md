@@ -1,6 +1,7 @@
 # 风草顶点着色器分析（wind_grass VS）
 
 > 来源：RenderDoc shader viewer 反编译（SPIRV-Cross 格式）
+> 文件都在 `shaders/archive/gots_wind_grass/`
 > 原始文件：`wind_grass_vs_dump.hlsl`（2457 行）
 > 配套 PS：`wind_grass_ps_dump.hlsl`（3Dmigoto 格式）
 

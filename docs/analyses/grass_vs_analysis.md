@@ -1,8 +1,9 @@
 # 草/植被顶点着色器分析文档
 
 > 来源：RenderDoc + 3Dmigoto v1.4.6 反编译  
-> 原始文件：`新建 Text Document.txt`  
-> 可读版本：`grass_vs_readable.hlsl`（注释版）、`grass_vs_readable copy.hlsl`（重构版）
+> 文件都在 `shaders/archive/grass_foliage/`  
+> 原始文件：`grass_vs_paste_dump.hlsl`  
+> 可读版本：`grass_vs_readable.hlsl`（注释版）、`grass_vs_readable_refactor.hlsl`（重构版）
 
 ---
 
@@ -24,14 +25,14 @@
 
 | 文件 | 用途 | 是否改代码 |
 |------|------|-----------|
-| `新建 Text Document.txt` | 3Dmigoto 原始反编译 | — |
+| `grass_vs_paste_dump.hlsl` | 3Dmigoto 原始反编译 | — |
 | `grass_vs_readable.hlsl` | 逐行注释，**数学 100% 与原版一致** | 否 |
-| `grass_vs_readable copy.hlsl` | 重构为可读函数/变量名 | 是（已修正主要错误） |
+| `grass_vs_readable_refactor.hlsl` | 重构为可读函数/变量名 | 是（已修正主要错误） |
 
 **选用建议：**
 
 - 需要 **替换进游戏且形态完全一致** → 用 `grass_vs_readable.hlsl`
-- 需要 **阅读理解/二次开发** → 用 `grass_vs_readable copy.hlsl`
+- 需要 **阅读理解/二次开发** → 用 `grass_vs_readable_refactor.hlsl`
 - 重构版中 **上一帧运动向量路径仍为占位**，不影响弯曲形态，只影响 TAA
 
 ---
@@ -213,7 +214,7 @@ float3 worldRoot = float3(v8.w, v9.w, v10.w);
 
 ## 7. 重构版的错误与修正
 
-首次重构（`grass_vs_readable copy.hlsl` 初版）导致 **草叶统一斜向弯曲**，原因如下：
+首次重构（`grass_vs_readable_refactor.hlsl` 初版）导致 **草叶统一斜向弯曲**，原因如下：
 
 | # | 错误 | 现象 | 修正 |
 |---|------|------|------|
@@ -343,10 +344,11 @@ motionUV = lastScreenUV - curScreenUV;
 
 ```
 RenderDocMCP/
-├── 新建 Text Document.txt          # 原始反编译
-├── grass_vs_readable.hlsl          # 注释版（推荐替换进游戏）
-├── grass_vs_readable copy.hlsl     # 重构版（已修正主要错误）
-└── grass_vs_analysis.md            # 本文档
+├── shaders/archive/grass_foliage/
+│   ├── grass_vs_paste_dump.hlsl        # 原始反编译
+│   ├── grass_vs_readable.hlsl          # 注释版（推荐替换进游戏）
+│   └── grass_vs_readable_refactor.hlsl # 重构版（已修正主要错误）
+└── docs/analyses/grass_vs_analysis.md  # 本文档
 ```
 
 ---
