@@ -14,7 +14,7 @@
 #define STEP_IBL_EMISSIVE 1
 #define STEP_COLOR_GRADE  1
 #define DEBUG_VIS         0
-// 0 final | 1 base | 2 N | 3 mask | 4 litDirect | 5 rim | 6 preExposure | 7 1-|N·V|
+// 0 final | 1 base | 2 N | 3 mask | 4 litDirect | 5 rim | 6 gi | 7 1-|N·V|
 
 TextureCube<float4> ReflectionCube  : register(t18);
 Texture2D<float4>   EmissiveMap     : register(t17);
@@ -97,34 +97,36 @@ float2 EvalMotion(float3 curr, float3 prev)
   return mag * s * 0.5 + 0.5;
 }
 
+// Split-sum rational fits. Numerators use nDotV (linear), denominators nDotV²/nDotV³.
+// Every dot is weighted by rPow = (1, rough², rough⁶) — order matters.
 void EvalIblF(float nDotV, float roughness, float3 specF0, out float3 F, out float Fsum)
 {
-  float x = nDotV * nDotV;
-  float z = x * nDotV;
+  float v  = nDotV;
+  float v2 = v * v;
+  float v3 = v2 * v;
   float ry = roughness * roughness;
-  float rz = ry * ry * ry;
-  float3 ry1 = float3(ry, 1, rz);
+  float3 rPow = float3(1.0, ry, ry * ry * ry);
 
   float2 num1 = float2(
-    dot(float2(3.32707, 1), float2(x, 9.0632)),
-    dot(float2(-9.04755974, 1), float2(x, 0.99044)));
+    3.32707 * v + 0.0365463011,
+    -9.04755974 * v + 9.0632);
   float3 den1 = float3(
-    dot(float3(3.59684992, -1.36772001, 1), float3(x, z, 9.04401016)),
-    dot(float3(-16.3174, 1, 9.22949028), float3(x, z, 1)),
-    dot(float3(1, 19.7886009, -20.2122993), float3(5.56588984, x, z)));
-  float f1 = dot(num1, float2(ry, 1)) / dot(den1, ry1);
+    3.59684992 * v2 - 1.36772001 * v3 + 1.0,
+    -16.3174 * v2 + 9.04401016 + 9.22949028 * v3,
+    5.56588984 + 19.7886009 * v2 - 20.2122993 * v3);
+  float f1 = dot(num1, rPow.xy) / dot(den1, rPow);
 
   float2 num2 = float2(
-    dot(float2(-1.28514, 1), float2(x, 0.99044)),
-    dot(float2(1, -0.755907), float2(1.29678, x)));
+    -1.28514004 * v + 0.990440011,
+    1.29677999 - 0.755906999 * v);
   float3 den2 = float3(
-    dot(float3(2.92338, 59.4188, 1), float3(x, 9.04401, 1)),
-    dot(float3(1, -27.0302, 222.592), float3(20.3225, x, 121.563)),
-    dot(float3(626.13, 316.627, 1), float3(x, 9.04401, 1)));
-  float f2 = dot(num2, float2(ry, 1)) / max(1e-6, dot(den2, ry1));
+    2.9233799 * v + 59.4188004 * v3 + 1.0,
+    20.3225002 - 27.0301991 * v + 222.591995 * v3,
+    626.130005 * v + 316.627014 * v3 + 121.563004);
+  float f2 = dot(num2, rPow.xy) / dot(den2, rPow);
 
   F = specF0 * f1 + f2;
-  Fsum = f1 + f2;
+  Fsum = f2 + f1;
 }
 
 float3 EvalColorGrade(
@@ -333,7 +335,8 @@ void main(
   float3 diffShift = (baseColor.xyz * dielectF - diffLuma) * 1.2 + diffLuma - albedoLit;
   float3 diffLit = aoRamp * diffShift + albedoLit;
 
-  float ratio = saturate(min(1.5, dot(mid, kLuma) / max(0.001, dot(rampLit, kLuma))));
+  // dump clamps to [0, 1.5] — not saturate
+  float ratio = min(1.5, max(0.0, dot(mid, kLuma) / max(0.001, dot(rampLit, kLuma))));
   diffLit = lerp(diffLit, rampLit * ratio, aoScreen);
 
   float shadow = lerp(aoRamp, ao, aoScreen);
@@ -357,7 +360,8 @@ void main(
   specF0 = lerp(specF0, brdfF0, brdfLutBlend);
   float alphaBlend = lerp(1.0, baseColor.w, alphaBlendAmt);
 
-  float specInt = saturate(min(20.0, max(0.0, specD * (0.5 / (nDotV * 2.0 + a + 1e-4)) - 6.10351562e-05)));
+  // dump clamps to [0, 20] — not saturate
+  float specInt = min(20.0, max(0.0, specD * (0.5 / (nDotV * 2.0 + a + 9.99999975e-05)) - 6.10351562e-05));
   float3 specLight = lightCol * (shadow * 0.5 + 0.5) * directScale;
   float3 litDirect = diffLit * lightCol * alphaBlend
                    + brdfF0 * specInt * specLight * specIntensity;
@@ -390,7 +394,7 @@ void main(
     gi *= saturate(aoScreen * wrapFlat);
     gi *= (backlit * aoScreen + (1.0 - aoScreen)) * (1.0 - wrapKill);
     gi *= Smooth01(saturate(5.0 * (0.4 - abs(ndotv))));
-    gi *= min(screen.y, mask.z);
+    // dump multiplies by a probe-cascade scalar here; probe path removed → 1
     float dark = Smooth01(saturate((-diffLuma + 0.1) * 16.666666));
     gi *= dark * aoScreen + (1.0 - aoScreen);
   }
@@ -406,12 +410,12 @@ void main(
   color += emissive * emissiveTint * emissiveGain * alphaBlend;
 
   float3 F; float Fsum;
-  EvalIblF(nDotV, max(0.001, roughness), specF0, F, Fsum);
+  EvalIblF(nDotV, roughness, specF0, F, Fsum); // fit takes raw roughness
 
   float3 R = reflect(-viewDir, N);
   float mip = log2(max(0.001, roughness)) * 1.2 + 5.0;
   float3 cube = ReflectionCube.SampleLevel(sampLinear, R, mip).xyz;
-  float3 ibl = specF0 * ((1.0 - Fsum) / max(1e-5, Fsum));
+  float3 ibl = specF0 * ((1.0 - Fsum) / Fsum);
   ibl = (ibl * F + F) * cube;
   ibl *= envIblScale * scaleHi.z * directScale;
   color += ibl * probeTint;
@@ -438,7 +442,7 @@ void main(
 #elif DEBUG_VIS == 5
   o0 = float4(rimTerm, 1);
 #elif DEBUG_VIS == 6
-  o0 = float4(color, 1);
+  o0 = float4(gi, 1); // fog removed → pre-exposure色与0号几乎一致，改看 GI
 #elif DEBUG_VIS == 7
   o0 = float4(fresnelRim.xxx, 1);
 #endif
